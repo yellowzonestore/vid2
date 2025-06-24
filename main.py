@@ -1,53 +1,40 @@
 from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
-from yt_dlp import YoutubeDL
-from typing import Optional
+from fastapi.responses import FileResponse, JSONResponse
+import yt_dlp
+import os
+import uuid
 
 app = FastAPI()
 
-@app.get("/")
-def root():
-    return {"message": "🎥 Video Downloader API is working!"}
+DOWNLOADS_DIR = "downloads"
+os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 @app.get("/download")
-def download_video(url: str):
+def download_tiktok(url: str = Query(...)):
     try:
+        filename = f"{uuid.uuid4().hex}.mp4"
+        filepath = os.path.join(DOWNLOADS_DIR, filename)
+
         ydl_opts = {
+            'outtmpl': filepath,
+            'format': 'mp4',
             'quiet': True,
-            'skip_download': True,
             'noplaylist': True,
+            'postprocessors': [],
+            'merge_output_format': 'mp4',
+            'extractor_args': {
+                'tiktok': {
+                    'embed_missings': 'False',
+                    'noprogress': 'True',
+                    'no_wm': 'True',  # ❗️المهم لإزالة العلامة المائية
+                }
+            },
         }
 
-        # تحايل لإزالة العلامة المائية من TikTok إن أمكن
-        if 'tiktok.com' in url:
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegVideoRemuxer',
-                'preferedformat': 'mp4',
-            }]
-            ydl_opts['force_generic_extractor'] = False
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
 
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-
-        formats = []
-        for fmt in info.get('formats', []):
-            if fmt.get('url') and fmt.get('ext') in ['mp4', 'webm']:
-                formats.append({
-                    'quality': fmt.get('format_note') or 
-fmt.get('format'),
-                    'resolution': f"{fmt.get('height', 'N/A')}p",
-                    'ext': fmt.get('ext'),
-                    'download_url': fmt.get('url')
-                })
-
-        result = {
-            "title": info.get('title'),
-            "thumbnail": info.get('thumbnail'),
-            "duration": info.get('duration'),
-            "available_formats": formats
-        }
-        return result
+        return FileResponse(path=filepath, media_type="video/mp4", filename="video.mp4")
 
     except Exception as e:
-        return JSONResponse(content={"status": "error", "message": 
-str(e)}, status_code=500)
+        return JSONResponse(status_code=500, content={"error": str(e)})
