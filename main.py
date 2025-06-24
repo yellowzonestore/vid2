@@ -9,27 +9,36 @@ app = FastAPI()
 DOWNLOADS_DIR = "downloads"
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
+def get_ydl_options(url, filepath):
+    if "tiktok.com" in url:
+        return {
+            'outtmpl': filepath,
+            'format': 'mp4',
+            'quiet': True,
+            'noplaylist': True,
+            'merge_output_format': 'mp4',
+            'extractor_args': {
+                'tiktok': {
+                    'no_wm': 'True',
+                }
+            },
+        }
+    else:
+        return {
+            'outtmpl': filepath,
+            'format': 'mp4',
+            'quiet': True,
+            'noplaylist': True,
+            'merge_output_format': 'mp4',
+        }
+
 @app.get("/download")
 def download_tiktok(url: str = Query(...)):
     try:
         filename = f"{uuid.uuid4().hex}.mp4"
         filepath = os.path.join(DOWNLOADS_DIR, filename)
 
-        ydl_opts = {
-            'outtmpl': filepath,
-            'format': 'mp4',
-            'quiet': True,
-            'noplaylist': True,
-            'postprocessors': [],
-            'merge_output_format': 'mp4',
-            'extractor_args': {
-                'tiktok': {
-                    'embed_missings': 'False',
-                    'noprogress': 'True',
-                    'no_wm': 'True',  # ❗️المهم لإزالة العلامة المائية
-                }
-            },
-        }
+        ydl_opts = get_ydl_options(url, filepath)
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
