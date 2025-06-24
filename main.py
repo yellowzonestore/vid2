@@ -3,19 +3,25 @@ from fastapi.responses import FileResponse, JSONResponse
 import yt_dlp
 import os
 import uuid
-import requests
+import requests  # ✅ مضافة لفك الروابط المختصرة
 
 app = FastAPI()
 
 DOWNLOADS_DIR = "downloads"
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
-@app.get("/download")
-def download_video(url: str = Query(...)):
+# ✅ دالة فك الروابط المختصرة
+def resolve_url(url: str) -> str:
     try:
-        # فك أي رابط مختصر (مثل vm.tiktok، youtu.be، bit.ly، إلخ)
-        response = requests.get(url, allow_redirects=True)
-        full_url = response.url
+        response = requests.get(url, allow_redirects=True, timeout=10)
+        return response.url
+    except Exception:
+        return url  # fallback إذا فشل التحويل
+
+@app.get("/download")
+def download_tiktok(url: str = Query(...)):
+    try:
+        url = resolve_url(url)  # ✅ فك الرابط المختصر أولًا
 
         filename = f"{uuid.uuid4().hex}.mp4"
         filepath = os.path.join(DOWNLOADS_DIR, filename)
@@ -25,19 +31,19 @@ def download_video(url: str = Query(...)):
             'format': 'mp4',
             'quiet': True,
             'noplaylist': True,
+            'postprocessors': [],
             'merge_output_format': 'mp4',
+            'extractor_args': {
+                'tiktok': {
+                    'embed_missings': 'False',
+                    'noprogress': 'True',
+                    'no_wm': 'True',  # ❗️المهم لإزالة العلامة المائية
+                }
+            },
         }
 
-        # TikTok فقط: نحاول نزيل العلامة المائية
-        if "tiktok.com" in full_url:
-            ydl_opts['extractor_args'] = {
-                'tiktok': {
-                    'no_wm': 'True'
-                }
-            }
-
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([full_url])
+            ydl.download([url])
 
         return FileResponse(path=filepath, media_type="video/mp4", filename="video.mp4")
 
